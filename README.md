@@ -20,10 +20,10 @@ If the incoming order's quantity exceeds the available resting quantity, the eng
 
 ## Key Features
 
-- **Limit Order Processing** — instant trade execution when prices cross; unmatched volume rests on the book.
-- **Order Sweeping & Partial Fills** — a single large incoming order can fill against multiple smaller resting orders sequentially.
-- **Order Cancellation** — removes active or partially filled resting orders by order ID.
-- **Execution Receipts** — returns detailed trade records containing buyer and seller IDs, execution price, and filled quantity.
+- **Limit Order Processing**: instant trade execution when prices cross; unmatched volume rests on the book.
+- **Order Sweeping & Partial Fills**: a single large incoming order can fill against multiple smaller resting orders sequentially.
+- **Order Cancellation**: removes active or partially filled resting orders by order ID.
+- **Execution Receipts**: returns detailed trade records containing buyer and seller IDs, execution price, and filled quantity.
 
 ---
 
@@ -46,12 +46,12 @@ Matching-Engine/
 
 ## Example Flow
 
-1. **Order 1 (Sell):** 10 units at $100.00. No buyers available — Order 1 rests on the sell side.
+1. **Order 1 (Sell):** 10 units at $100.00. No buyers available, Order 1 rests on the sell side.
 2. **Order 2 (Buy):** 15 units at $100.00. Prices cross ($100.00 ≥ $100.00).
    - Trades 10 units against Order 1.
    - Order 1 is fully filled and removed.
    - The remaining 5 units of Order 2 rest on the buy side.
-3. **Cancel Request:** Cancel Order 2 — the remaining 5 resting units are removed from the book.
+3. **Cancel Request:** Cancel Order 2, the remaining 5 resting units are removed from the book.
 
 ---
 
@@ -78,14 +78,14 @@ make
 ## Current Limitations
 
 This is a correctness-first implementation (v1). Notably:
-- Resting orders are stored in plain `std::vector`s, not price-indexed structures — matching against the "best" price currently relies on insertion order rather than true price-time priority.
+- Resting orders are stored in plain `std::vector`s, not price-indexed structures, matching against the "best" price currently relies on insertion order rather than true price-time priority.
 - No market orders, order types beyond limit, or timestamp-based tie-breaking yet.
 - Single-threaded, no networking/protocol layer, no persistence.
 
 ## Roadmap
 
-- [ ] **Price-time priority** — replace vectors with a sorted price-level structure (`std::map<price, deque<Order>>`) plus a hash map for O(1) cancel-by-ID.
-- [ ] **Market orders** — execute immediately against best available liquidity, no limit price.
-- [ ] **Automated test suite** — move ad hoc scenarios out of `main.cpp` into a proper test framework (GoogleTest/Catch2).
-- [ ] **Concurrency** — lock-free structures for concurrent order submission.
-- [ ] **Benchmarking** — microsecond-level latency measurements for order entry and matching.
+- [ ] **Price-time priority**: replace vectors with a sorted price-level structure (`std::map<price, deque<Order>>`) plus a hash map for O(1) cancel-by-ID.
+- [ ] **Market orders**: execute immediately against best available liquidity, no limit price.
+- [ ] **Automated test suite**: move ad hoc scenarios out of `main.cpp` into a proper test framework (GoogleTest/Catch2).
+- [ ] **Concurrency**: lock-free structures for concurrent order submission.
+- [ ] **Benchmarking**: microsecond-level latency measurements for order entry and matching.
