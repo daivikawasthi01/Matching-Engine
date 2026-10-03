@@ -1,6 +1,11 @@
 build/
 *.o
+.DS_Store
+.vscode/
 matching_engine
 app
 src/main
-.vscode/
+tests/test_order_book
+tests/benchmark
+test_order_book
+benchmark

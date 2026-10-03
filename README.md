@@ -11,6 +11,7 @@ This project simulates the core infrastructure of a financial exchange: processi
 At the core of an exchange, a matching engine maintains two sets of orders inside an order book: **bids** (buy orders) and **asks** (sell orders).
 
 When a new order enters the book, the engine checks for a price cross:
+
 - **Incoming Buy Order:** Matches if its limit price is greater than or equal to the lowest ask price currently on the book.
 - **Incoming Sell Order:** Matches if its limit price is less than or equal to the highest bid price currently on the book.
 
@@ -20,10 +21,10 @@ If the incoming order's quantity exceeds the available resting quantity, the eng
 
 ## Key Features
 
-- **Limit Order Processing**: instant trade execution when prices cross; unmatched volume rests on the book.
-- **Order Sweeping & Partial Fills**: a single large incoming order can fill against multiple smaller resting orders sequentially.
-- **Order Cancellation**: removes active or partially filled resting orders by order ID.
-- **Execution Receipts**: returns detailed trade records containing buyer and seller IDs, execution price, and filled quantity.
+- **Limit Order Processing:** Instant trade execution when prices cross; unmatched volume rests on the book.
+- **Order Sweeping & Partial Fills:** A single large incoming order can fill against multiple smaller resting orders sequentially.
+- **Order Cancellation:** Removes active or partially filled resting orders by order ID.
+- **Execution Receipts:** Returns detailed trade records containing buyer and seller IDs, execution price, and filled quantity.
 
 ---
 
@@ -38,6 +39,9 @@ Matching-Engine/
 ├── src/
 │   ├── order_book.cpp  # Matching engine logic, sweeping, and cancellation
 │   └── main.cpp        # Driver script and test scenarios
+├── tests/
+│   ├── test_order_book.cpp  # Unit test suite
+│   └── benchmark.cpp        # High-throughput latency benchmark
 ├── CMakeLists.txt      # Build configuration
 └── README.md
 ```
@@ -57,13 +61,15 @@ Matching-Engine/
 
 ## Building and Running
 
-**Prerequisites**
+### Prerequisites
+
 - C++17-compatible compiler (`g++` or `clang++`)
 - CMake 3.10 or higher
 
-**Build Instructions**
+### Build Instructions
+
 ```bash
-git clone https://github.com/daivikawasthi/Matching-Engine.git
+git clone https://github.com/daivikawasthi01/Matching-Engine.git
 cd Matching-Engine
 
 mkdir build && cd build
@@ -73,19 +79,41 @@ make
 ./matching_engine
 ```
 
+### Direct Compilation (Alternative)
+
+```bash
+clang++ -std=c++17 -Iinclude src/main.cpp src/order_book.cpp -o matching_engine
+./matching_engine
+```
+
+### Running Tests and Benchmarks
+
+```bash
+# Unit Tests
+clang++ -std=c++17 -Iinclude tests/test_order_book.cpp src/order_book.cpp -o test_order_book
+./test_order_book
+
+# Benchmark
+clang++ -std=c++17 -O3 -Iinclude tests/benchmark.cpp src/order_book.cpp -o benchmark
+./benchmark
+```
+
 ---
 
 ## Current Limitations
 
 This is a correctness-first implementation (v1). Notably:
-- Resting orders are stored in plain `std::vector`s, not price-indexed structures, matching against the "best" price currently relies on insertion order rather than true price-time priority.
+
+- Resting orders are stored in plain `std::vector`s, not price-indexed structures; matching against the "best" price currently relies on insertion order rather than true price-time priority.
 - No market orders, order types beyond limit, or timestamp-based tie-breaking yet.
 - Single-threaded, no networking/protocol layer, no persistence.
 
+---
+
 ## Roadmap
 
-- [ ] **Price-time priority**: replace vectors with a sorted price-level structure (`std::map<price, deque<Order>>`) plus a hash map for O(1) cancel-by-ID.
-- [ ] **Market orders**: execute immediately against best available liquidity, no limit price.
-- [ ] **Automated test suite**: move ad hoc scenarios out of `main.cpp` into a proper test framework (GoogleTest/Catch2).
-- [ ] **Concurrency**: lock-free structures for concurrent order submission.
-- [ ] **Benchmarking**: microsecond-level latency measurements for order entry and matching.
+- [ ] **Price-time priority:** Replace vectors with a sorted price-level structure (`std::map<price, deque<Order>>`) plus a hash map for O(1) cancel-by-ID.
+- [ ] **Market orders:** Execute immediately against best available liquidity, no limit price.
+- [ ] **Automated test suite:** Move ad hoc scenarios out of `main.cpp` into a proper test framework (GoogleTest/Catch2).
+- [ ] **Concurrency:** Lock-free structures for concurrent order submission.
+- [ ] **Benchmarking:** Microsecond-level latency measurements for order entry and matching.
