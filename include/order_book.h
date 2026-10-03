@@ -1,26 +1,43 @@
-//OrderBook - Manager
 #pragma once
 
 #include <vector>
-//since it deals with order and trade, it needs to read their blueprints first
+#include <map>
+#include <list>
+#include <unordered_map>
+#include <optional>
 #include "order.h"
 #include "trade.h"
 
-//Why not Struct?
-//Since, unlike a struct(deals with mostly data), here both data(active order) and behaviour(fns that act on data) are needed
 class OrderBook {
 public:
-    // Adds a new order. Returns a Trade if it matched, or std::nullopt if it just rested.
+    // Adds a new limit or market order. Returns execution trade receipts.
     std::vector<Trade> addOrder(const Order& order);
-    //std::vector allows an incoming order to execute multiple resting orders.
-    //partial matching is allowed.
-    //empty vector -> no matches and order simply rested
 
+    // Cancels an active resting order by its ID in O(1) time complexity.
     bool cancelOrder(int orderId);
-    //look up an order by its unique id and remove it from book
+
+    // Helper inspection methods
+    bool empty() const;
+    size_t getOrderCount() const;
+    std::optional<double> getBestBid() const;
+    std::optional<double> getBestAsk() const;
 
 private:
-    //Two lists storing buy and sell orders respectively
-    std::vector<Order> buyOrders;
-    std::vector<Order> sellOrders;
+    // Location tracker for O(1) order cancellation
+    struct OrderLocation {
+        Side side;
+        double price;
+        std::list<Order>::iterator it;
+    };
+
+    // Bids: Sorted in descending order of price (highest bid first)
+    // Each price level contains a FIFO queue (std::list) of orders for time priority
+    std::map<double, std::list<Order>, std::greater<double>> bids;
+
+    // Asks: Sorted in ascending order of price (lowest ask first)
+    // Each price level contains a FIFO queue (std::list) of orders for time priority
+    std::map<double, std::list<Order>, std::less<double>> asks;
+
+    // Hash map index: orderId -> OrderLocation for O(1) cancel lookup
+    std::unordered_map<int, OrderLocation> orderIndex;
 };

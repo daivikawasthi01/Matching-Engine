@@ -86,16 +86,28 @@ clang++ -std=c++17 -Iinclude src/main.cpp src/order_book.cpp -o matching_engine
 ./matching_engine
 ```
 
-### Running Tests and Benchmarks
+### Using Makefile (Recommended)
+
+```bash
+# Run all unit and regression test suites
+make test
+
+# Run throughput & latency benchmark
+make run-benchmark
+
+# Build main demo executable
+make all
+./bin/matching_engine
+```
+
+### Direct Compilation (Alternative)
 
 ```bash
 # Unit Tests
-clang++ -std=c++17 -Iinclude tests/test_order_book.cpp src/order_book.cpp -o test_order_book
-./test_order_book
+clang++ -std=c++17 -Iinclude tests/test_order_book.cpp src/order_book.cpp -o bin/test_order_book && ./bin/test_order_book
 
 # Benchmark
-clang++ -std=c++17 -O3 -Iinclude tests/benchmark.cpp src/order_book.cpp -o benchmark
-./benchmark
+clang++ -std=c++17 -O3 -Iinclude tests/benchmark.cpp src/order_book.cpp -o bin/benchmark && ./bin/benchmark
 ```
 
 ---

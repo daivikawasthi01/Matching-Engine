@@ -1,90 +1,137 @@
-#include "order_book.h"
-#include <algorithm> //required for min & find_if
+#include "../include/order_book.h"
+#include <algorithm>
 
+std::vector<Trade> OrderBook::addOrder(const Order& order) {
+    std::vector<Trade> trades;
+    Order incoming = order;
 
-//OrderBook:: - means this method belongs to OrderBook class
-std::vector<Trade> OrderBook::addOrder(const Order& order){
-    std::vector<Trade> trades; //collects all trades executed during this single order insertion
-    Order incoming = order; //Since const order, create a modifiable(mutable) copy
-    
-    if(incoming.side == Side::Buy){
+    if (incoming.side == Side::Buy) {
+        // Buy order matches against resting Sell orders (asks)
+        // Price condition: Market orders match unconditionally; Limit orders require incoming price >= best ask
+        while (incoming.quantity > 0 && !asks.empty()) {
+            auto askIt = asks.begin();
+            double bestAskPrice = askIt->first;
 
-        //Check if the buyer is willing to pay atleast as much as seller's asking price
-        //Use a while loop to match as many resting orders as needed. Keep matching as long as incoming order has qty left to fill.
-        while(incoming.quantity > 0 && !sellOrders.empty() && incoming.price >= sellOrders.front().price){
-            
-            // Grab a non-const reference (&) so we can modify the resting order's quantity directly inside the vector
-            Order& resting = sellOrders.front();
+            if (incoming.type == OrderType::Limit && incoming.price < bestAskPrice) {
+                break; // No price cross
+            }
 
-            // Executed quantity is limited by whichever order has less quantity remaining
+            auto& orderList = askIt->second;
+            Order& resting = orderList.front();
+
             int filledQty = std::min(incoming.quantity, resting.quantity);
 
-            //Create and record trade receipt
+            // Record trade: Buyer = incoming, Seller = resting, Price = resting.price (maker price)
             trades.push_back(Trade{incoming.id, resting.id, resting.price, filledQty});
 
-            // Deduct the matched quantity from both orders
             incoming.quantity -= filledQty;
             resting.quantity -= filledQty;
 
-            //if resting order fully filled, pop it from front of vector
-            if(resting.quantity == 0){
-                sellOrders.erase(sellOrders.begin());
+            // If resting order is fully filled, remove it from list and lookup index
+            if (resting.quantity == 0) {
+                orderIndex.erase(resting.id);
+                orderList.pop_front();
+                if (orderList.empty()) {
+                    asks.erase(askIt);
+                }
             }
         }
 
-        //if incoming buy order not fully filled, store whatever qty remains on the book
-        if(incoming.quantity > 0){
-            buyOrders.push_back(incoming);
-        }  
-    } else{
-        //Use a while loop to match as many incoming orders(as long as qty remaining)
-        //Check if seller's asking price is less than or equal to what buyer is offering
-        while(incoming.quantity > 0 && !buyOrders.empty() && incoming.price <= buyOrders.front().price){
-            
-            //Do the same thing for match as sell
-            Order& resting = buyOrders.front();
+        // If limit order has unexecuted volume remaining, rest it on the buy side (bids)
+        if (incoming.quantity > 0 && incoming.type == OrderType::Limit) {
+            auto& orderList = bids[incoming.price];
+            orderList.push_back(incoming);
+            auto it = std::prev(orderList.end());
+            orderIndex[incoming.id] = OrderLocation{Side::Buy, incoming.price, it};
+        }
+    } else {
+        // Sell order matches against resting Buy orders (bids)
+        // Price condition: Market orders match unconditionally; Limit orders require incoming price <= best bid
+        while (incoming.quantity > 0 && !bids.empty()) {
+            auto bidIt = bids.begin();
+            double bestBidPrice = bidIt->first;
+
+            if (incoming.type == OrderType::Limit && incoming.price > bestBidPrice) {
+                break; // No price cross
+            }
+
+            auto& orderList = bidIt->second;
+            Order& resting = orderList.front();
+
             int filledQty = std::min(incoming.quantity, resting.quantity);
 
-            //for sell orders, resting order is the buyer, incoming order is the seller
+            // Record trade: Buyer = resting, Seller = incoming, Price = resting.price (maker price)
             trades.push_back(Trade{resting.id, incoming.id, resting.price, filledQty});
 
             incoming.quantity -= filledQty;
             resting.quantity -= filledQty;
-            
-            if(resting.quantity == 0){
-                buyOrders.erase(buyOrders.begin());
+
+            // If resting order is fully filled, remove it from list and lookup index
+            if (resting.quantity == 0) {
+                orderIndex.erase(resting.id);
+                orderList.pop_front();
+                if (orderList.empty()) {
+                    bids.erase(bidIt);
+                }
             }
         }
-        //if incoming sell order not fully fulfilled, rest remaining quantity on the book
-        if(incoming.quantity > 0){
-            sellOrders.push_back(incoming);
+
+        // If limit order has unexecuted volume remaining, rest it on the sell side (asks)
+        if (incoming.quantity > 0 && incoming.type == OrderType::Limit) {
+            auto& orderList = asks[incoming.price];
+            orderList.push_back(incoming);
+            auto it = std::prev(orderList.end());
+            orderIndex[incoming.id] = OrderLocation{Side::Sell, incoming.price, it};
         }
     }
 
-    // return all execution receipts (will be empty if no match occured)
     return trades;
 }
 
-bool OrderBook::cancelOrder(int orderId){
-    // Lambda function (inline anonymous function) that searches a vector for an order by ID and erases it
-    // [orderId] captures the target ID from the outer function
-    // (std::vector<Order>& orders) accepts either buyOrders or sellOrders by reference
-    auto removeById = [orderId](std::vector<Order>& orders){
+bool OrderBook::cancelOrder(int orderId) {
+    auto it = orderIndex.find(orderId);
+    if (it == orderIndex.end()) {
+        return false;
+    }
 
-        // std::find_if iterates from begin() to end(), stopping when the lambda predicate returns true
-        auto it = std::find_if(orders.begin(), orders.end(), [orderId](const Order& o){
-            return o.id == orderId;
-        });
+    const OrderLocation& loc = it->second;
 
-        // If std::find_if didn't reach end(), it found a match
-        if (it != orders.end()) {
-            orders.erase(it); // Remove the order from the vector
-            return true;      // Cancel successful
+    if (loc.side == Side::Buy) {
+        auto priceIt = bids.find(loc.price);
+        if (priceIt != bids.end()) {
+            priceIt->second.erase(loc.it);
+            if (priceIt->second.empty()) {
+                bids.erase(priceIt);
+            }
         }
-        return false;         // Order ID wasn't in this vector
-    };
+    } else {
+        auto priceIt = asks.find(loc.price);
+        if (priceIt != asks.end()) {
+            priceIt->second.erase(loc.it);
+            if (priceIt->second.empty()) {
+                asks.erase(priceIt);
+            }
+        }
+    }
 
-    // Try finding and removing from buyOrders first; if not found, try sellOrders
-    if(removeById(buyOrders)) return true;
-    return removeById(sellOrders);
+    orderIndex.erase(it);
+    return true;
+}
+
+bool OrderBook::empty() const {
+    return orderIndex.empty();
+}
+
+size_t OrderBook::getOrderCount() const {
+    return orderIndex.size();
+}
+
+std::optional<double> OrderBook::getBestBid() const {
+    if (bids.empty()) return std::nullopt;
+    return bids.begin()->first;
+}
+
+std::optional<double> OrderBook::getBestAsk() const {
+    if (asks.empty()) return std::nullopt;
+    return asks.begin()->first;
 }

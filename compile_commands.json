@@ -1,0 +1,32 @@
+[
+  {
+    "directory": "/Users/daivikawasthi/TechnicalProjects/Matching-Engine",
+    "command": "/usr/bin/clang++ -std=c++17 -Iinclude -c src/main.cpp -o bin/main.o",
+    "file": "src/main.cpp"
+  },
+  {
+    "directory": "/Users/daivikawasthi/TechnicalProjects/Matching-Engine",
+    "command": "/usr/bin/clang++ -std=c++17 -Iinclude -c src/order_book.cpp -o bin/order_book.o",
+    "file": "src/order_book.cpp"
+  },
+  {
+    "directory": "/Users/daivikawasthi/TechnicalProjects/Matching-Engine",
+    "command": "/usr/bin/clang++ -std=c++17 -Iinclude -c tests/test_headers.cpp -o bin/test_headers.o",
+    "file": "tests/test_headers.cpp"
+  },
+  {
+    "directory": "/Users/daivikawasthi/TechnicalProjects/Matching-Engine",
+    "command": "/usr/bin/clang++ -std=c++17 -Iinclude -c tests/test_order_book.cpp -o bin/test_order_book.o",
+    "file": "tests/test_order_book.cpp"
+  },
+  {
+    "directory": "/Users/daivikawasthi/TechnicalProjects/Matching-Engine",
+    "command": "/usr/bin/clang++ -std=c++17 -Iinclude -c tests/test_edge_cases.cpp -o bin/test_edge_cases.o",
+    "file": "tests/test_edge_cases.cpp"
+  },
+  {
+    "directory": "/Users/daivikawasthi/TechnicalProjects/Matching-Engine",
+    "command": "/usr/bin/clang++ -std=c++17 -Iinclude -c tests/benchmark.cpp -o bin/benchmark.o",
+    "file": "tests/benchmark.cpp"
+  }
+]

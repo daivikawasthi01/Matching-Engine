@@ -9,3 +9,5 @@ tests/test_order_book
 tests/benchmark
 test_order_book
 benchmark
+bin/
+.cache/

@@ -1,18 +1,23 @@
-//How an order would look like - The Building Block
-
-//pragma means pragmatic information, it is a special preprocessor used to give extra instructions to your compiler. pragma once here means load the header file only one time during compilation, stopping duplicate errors.
-//it stops compiler from getting confused if two diff files ask to read order.h
 #pragma once
 
-#include<optional>
+#include <optional>
 
-//side only has two values buy or sell
-enum class Side { Buy, Sell };
+// Side of the order in the book
+enum class Side { 
+    Buy, 
+    Sell 
+};
 
-//struct - user defined datatype that groups related variables of diff data types together. It is a blueprint. It applies to both class and object(its instance)
+// Type of the order: Limit (rests on book at price) or Market (executes immediately against available liquidity)
+enum class OrderType { 
+    Limit, 
+    Market 
+};
+
 struct Order {
-    int id; //unique number identifying the order
-    Side side; //whether its a buy or sell
-    double price; //how much money per unit
-    int quantity; //how many units/shares
+    int id;                           // Unique identifier for the order
+    Side side;                        // Buy or Sell
+    double price;                     // Limit price (ignored for Market orders)
+    int quantity;                     // Number of shares / units
+    OrderType type = OrderType::Limit; // Order type (defaults to Limit)
 };
