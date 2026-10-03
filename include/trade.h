@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include<optional>
 
 struct Trade {
     int buyOrderId; //ID of buyer

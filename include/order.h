@@ -1,6 +1,5 @@
 #pragma once
 
-#include <optional>
 
 // Side of the order in the book
 enum class Side { 
