@@ -11,9 +11,11 @@
 class OrderBook {
 public:
     // Adds a new limit or market order. Returns execution trade receipts.
+    // Rejects duplicate order IDs and non-positive quantities (quantity <= 0).
     std::vector<Trade> addOrder(const Order& order);
 
-    // Cancels an active resting order by its ID in O(1) time complexity.
+    // Cancels an active resting order by its ID in O(log P) time complexity,
+    // where P is the number of active price levels.
     bool cancelOrder(int orderId);
 
     // Helper inspection methods
@@ -23,7 +25,7 @@ public:
     std::optional<double> getBestAsk() const;
 
 private:
-    // Location tracker for O(1) order cancellation
+    // Location tracker for fast order cancellation
     struct OrderLocation {
         Side side;
         double price;
@@ -38,6 +40,6 @@ private:
     // Each price level contains a FIFO queue (std::list) of orders for time priority
     std::map<double, std::list<Order>, std::less<double>> asks;
 
-    // Hash map index: orderId -> OrderLocation for O(1) cancel lookup
+    // Hash map index: orderId -> OrderLocation for O(1) location lookup
     std::unordered_map<int, OrderLocation> orderIndex;
 };

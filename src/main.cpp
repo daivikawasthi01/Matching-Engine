@@ -60,7 +60,7 @@ int main() {
     printTrades(book.addOrder(Order{5, Side::Buy, 0.0, 10, OrderType::Market}));
     printBookStatus(book);
 
-    // Scenario 4: Fast O(1) Cancellation
+    // Scenario 4: Fast O(log P) Cancellation
     std::cout << "\n4. Fast Order Cancellation:\n";
     std::cout << "   - Order 6: Buy 50 @ $98.00 (Resting Bid)\n";
     printTrades(book.addOrder(Order{6, Side::Buy, 98.0, 50}));
@@ -68,7 +68,7 @@ int main() {
 
     std::cout << "   - Cancelling Order 6 by ID:\n";
     bool cancelled = book.cancelOrder(6);
-    std::cout << "     Cancel status: " << (cancelled ? "SUCCESS (Removed in O(1))" : "FAILED") << "\n";
+    std::cout << "     Cancel status: " << (cancelled ? "SUCCESS (Removed in O(log P))" : "FAILED") << "\n";
     printBookStatus(book);
 
     std::cout << "\n=======================================================\n";

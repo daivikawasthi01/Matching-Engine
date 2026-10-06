@@ -2,6 +2,11 @@
 #include <algorithm>
 
 std::vector<Trade> OrderBook::addOrder(const Order& order) {
+    // Reject invalid orders (non-positive quantity or duplicate resting order ID)
+    if (order.quantity <= 0 || orderIndex.find(order.id) != orderIndex.end()) {
+        return {};
+    }
+
     std::vector<Trade> trades;
     Order incoming = order;
 

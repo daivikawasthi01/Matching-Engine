@@ -143,6 +143,57 @@ void test_cancellation() {
     std::cout << "[PASS] test_cancellation\n";
 }
 
+void test_reject_invalid_quantity() {
+    OrderBook book;
+    // Test quantity = 0
+    auto t1 = book.addOrder(Order{1, Side::Buy, 100.0, 0});
+    assert(t1.empty());
+    assert(book.empty());
+
+    // Test negative quantity
+    auto t2 = book.addOrder(Order{2, Side::Sell, 100.0, -10});
+    assert(t2.empty());
+    assert(book.empty());
+
+    // Test market order with 0 / negative quantity
+    auto t3 = book.addOrder(Order{3, Side::Buy, 0.0, 0, OrderType::Market});
+    assert(t3.empty());
+    assert(book.empty());
+
+    std::cout << "[PASS] test_reject_invalid_quantity\n";
+}
+
+void test_reject_duplicate_order_id() {
+    OrderBook book;
+    // Add first order with ID 1
+    auto t1 = book.addOrder(Order{1, Side::Buy, 100.0, 10});
+    assert(t1.empty());
+    assert(book.getOrderCount() == 1);
+
+    // Attempt to add duplicate order with ID 1
+    auto t2 = book.addOrder(Order{1, Side::Buy, 105.0, 20});
+    assert(t2.empty());
+    assert(book.getOrderCount() == 1);
+    assert(book.getBestBid() == 100.0); // original order remains untouched
+
+    // Attempt to add duplicate order with ID 1 as sell
+    auto t3 = book.addOrder(Order{1, Side::Sell, 100.0, 10});
+    assert(t3.empty());
+    assert(book.getOrderCount() == 1); // no match occurred
+
+    // Add order with different ID 2 -> should succeed
+    auto t4 = book.addOrder(Order{2, Side::Sell, 100.0, 10});
+    assert(t4.size() == 1);
+    assert(book.empty());
+
+    // After ID 1 is fully filled and removed from book, ID 1 can be used again (or if cancelled)
+    auto t5 = book.addOrder(Order{1, Side::Sell, 102.0, 5});
+    assert(t5.empty());
+    assert(book.getOrderCount() == 1);
+
+    std::cout << "[PASS] test_reject_duplicate_order_id\n";
+}
+
 int main() {
     std::cout << "===== Running Matching Engine Unit Tests =====\n";
     test_basic_match();
@@ -152,6 +203,8 @@ int main() {
     test_multi_level_sweep();
     test_market_orders();
     test_cancellation();
+    test_reject_invalid_quantity();
+    test_reject_duplicate_order_id();
     std::cout << "===== ALL TESTS PASSED =====\n";
     return 0;
 }
