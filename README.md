@@ -2,13 +2,13 @@
 
 A high-performance, deterministic limit order book (LOB) and matching engine core implemented in modern C++17.
 
-The engine simulates core financial exchange infrastructure: enforcing strict price-time priority (FIFO), processing limit and market orders, executing multi-level sweeps and partial fills, rejecting invalid or duplicate orders, and enabling fast $O(\log P)$ order cancellations.
+The engine simulates core financial exchange infrastructure with price-time priority, market orders, multi-level sweeps, and $O(\log P)$ cancel-by-ID via a hash index.
 
 ---
 
 ## Performance & Benchmark
 
-Benchmarked on **500,000 synthetic orders** (90% Limit Orders across varying price ticks, 10% Market Orders) on an Apple Silicon M-series machine compiled with `-O3`:
+Benchmarked on **500,000 synthetic orders** (90% Limit Orders across varying price ticks, 10% Market Orders) on an **Apple M3** processor compiled with **Apple Clang 17.0.0** using flags `-std=c++17 -O3 -Wall -Wextra -Wpedantic -Werror -Iinclude`:
 
 | Metric | Result |
 | :--- | :--- |
@@ -18,6 +18,8 @@ Benchmarked on **500,000 synthetic orders** (90% Limit Orders across varying pri
 | **P90 Latency** | **~0.38 µs** (380 ns) |
 | **P99 Latency** | **~1.75 µs** |
 | **P99.9 Latency** | **~4.00 µs** |
+
+*Note: Asserts are active during test builds (unaffected by `-DNDEBUG`). Active duplicate ID validation tracks currently resting orders in the hash index.*
 
 To run the benchmark on your local machine:
 ```bash
@@ -72,7 +74,7 @@ make run-benchmark
 - **Market Orders:** Immediate liquidity takers that execute unconditionally against resting liquidity across multiple price tiers. Any unfilled quantity is immediately discarded and never rests on the book.
 - **Multi-Level Order Sweeping & Partial Fills:** Large incoming aggressive orders can fill across multiple resting orders and multiple price levels sequentially in a single transaction.
 - **Order Cancellation:** Fast $O(\log P)$ removal of active resting orders by unique order ID.
-- **Input Validation & Safety:** Rejects duplicate active order IDs and non-positive quantities ($\le 0$).
+- **Input Validation & Resting ID Tracking:** Rejects duplicate active order IDs (resting order index releases ID upon full fill) and non-positive quantities ($\le 0$).
 - **Deterministic Trade Receipts:** Returns detailed trade records including buyer order ID, seller order ID, execution price, and executed quantity.
 
 ---
