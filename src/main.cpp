@@ -1,77 +1,80 @@
+#include <cstdio>
 #include <iostream>
+#include <string>
 #include <vector>
-#include <iomanip>
-#include "../include/order_book.h"
 
-void printTrades(const std::vector<Trade>& trades) {
-    if (trades.empty()) {
-        std::cout << "  -> No match (order rested or expired).\n";
-        return;
-    }
-    for (const auto& t : trades) {
-        std::cout << "  -> Trade Executed: Buyer #" << t.buyOrderId 
-                  << " <-> Seller #" << t.sellOrderId 
-                  << " | Price: $" << std::fixed << std::setprecision(2) << t.price 
-                  << " | Qty: " << t.quantity << "\n";
+#include "order_book.h"
+
+// Prices are integer ticks; this demo uses a tick size of $0.01.
+static std::string dollars(Price ticks) {
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "$%lld.%02lld", static_cast<long long>(ticks / 100),
+                  static_cast<long long>(ticks % 100));
+    return buf;
+}
+
+static void printResult(const AddResult& r) {
+    std::cout << "  -> " << toString(r.status) << " (seq " << r.sequence << ")";
+    if (r.restingQuantity > 0) std::cout << ", " << r.restingQuantity << " resting";
+    std::cout << "\n";
+    for (const auto& t : r.trades) {
+        std::cout << "     Trade #" << t.sequence << ": buyer " << t.buyOrderId << " <-> seller "
+                  << t.sellOrderId << " | " << dollars(t.price) << " | qty " << t.quantity << "\n";
     }
 }
 
-void printBookStatus(const OrderBook& book) {
-    std::cout << "  [Book Status] Active Orders: " << book.getOrderCount();
-    if (book.getBestBid().has_value()) {
-        std::cout << " | Best Bid: $" << *book.getBestBid();
-    } else {
-        std::cout << " | Best Bid: None";
-    }
-    if (book.getBestAsk().has_value()) {
-        std::cout << " | Best Ask: $" << *book.getBestAsk();
-    } else {
-        std::cout << " | Best Ask: None";
-    }
-    std::cout << "\n";
+static void printBook(const OrderBook& book) {
+    std::cout << "  [Book] orders: " << book.getOrderCount();
+    std::cout << " | best bid: "
+              << (book.getBestBid() ? dollars(*book.getBestBid()) : std::string("none"));
+    std::cout << " | best ask: "
+              << (book.getBestAsk() ? dollars(*book.getBestAsk()) : std::string("none")) << "\n";
 }
 
 int main() {
     OrderBook book;
 
     std::cout << "=======================================================\n";
-    std::cout << "       Deterministic C++17 Matching Engine Demo        \n";
+    std::cout << "        Deterministic C++17 Matching Engine Demo       \n";
     std::cout << "=======================================================\n\n";
 
-    // Scenario 1: Placing resting limit sell orders at multiple price levels
-    std::cout << "1. Placing Resting Limit Sell Orders (Asks):\n";
-    std::cout << "   - Order 1: Sell 10 @ $102.00\n";
-    printTrades(book.addOrder(Order{1, Side::Sell, 102.0, 10}));
-    std::cout << "   - Order 2: Sell 10 @ $100.00\n";
-    printTrades(book.addOrder(Order{2, Side::Sell, 100.0, 10}));
-    std::cout << "   - Order 3: Sell 15 @ $101.00\n";
-    printTrades(book.addOrder(Order{3, Side::Sell, 101.0, 15}));
-    printBookStatus(book);
+    std::cout << "1. Resting limit sell orders at three price levels:\n";
+    std::cout << "   Sell 10 @ $102.00, Sell 10 @ $100.00, Sell 15 @ $101.00\n";
+    printResult(book.addOrder(Order{1, Side::Sell, 10200, 10}));
+    printResult(book.addOrder(Order{2, Side::Sell, 10000, 10}));
+    printResult(book.addOrder(Order{3, Side::Sell, 10100, 15}));
+    printBook(book);
 
-    // Scenario 2: Price-Time priority sweep
-    std::cout << "\n2. Submitting Large Buy Limit Order (Sweeping Best Prices):\n";
-    std::cout << "   - Order 4: Buy 20 @ $101.50\n";
-    printTrades(book.addOrder(Order{4, Side::Buy, 101.5, 20}));
-    printBookStatus(book);
+    std::cout << "\n2. Buy 20 @ $101.50 sweeps the best prices first:\n";
+    printResult(book.addOrder(Order{4, Side::Buy, 10150, 20}));
+    printBook(book);
 
-    // Scenario 3: Market Order Execution
-    std::cout << "\n3. Submitting Market Buy Order (Immediate Liquidity Taker):\n";
-    std::cout << "   - Order 5: Market Buy 10 units\n";
-    printTrades(book.addOrder(Order{5, Side::Buy, 0.0, 10, OrderType::Market}));
-    printBookStatus(book);
+    std::cout << "\n3. Market buy 10 takes whatever liquidity is best:\n";
+    printResult(book.addOrder(Order{5, Side::Buy, 0, 10, OrderType::Market}));
+    printBook(book);
 
-    // Scenario 4: Fast O(log P) Cancellation
-    std::cout << "\n4. Fast Order Cancellation:\n";
-    std::cout << "   - Order 6: Buy 50 @ $98.00 (Resting Bid)\n";
-    printTrades(book.addOrder(Order{6, Side::Buy, 98.0, 50}));
-    printBookStatus(book);
+    std::cout << "\n4. Immediate-or-cancel: Buy 50 @ $103.00 IOC fills what it can, drops the rest:\n";
+    printResult(book.addOrder(Order{6, Side::Buy, 10300, 50, OrderType::Limit,
+                                    TimeInForce::ImmediateOrCancel}));
+    printBook(book);
 
-    std::cout << "   - Cancelling Order 6 by ID:\n";
-    bool cancelled = book.cancelOrder(6);
-    std::cout << "     Cancel status: " << (cancelled ? "SUCCESS (Removed in O(log P))" : "FAILED") << "\n";
-    printBookStatus(book);
+    std::cout << "\n5. Fill-or-kill: Buy 5 @ $99.00 FOK cannot fill, so nothing happens:\n";
+    book.addOrder(Order{7, Side::Sell, 10100, 8});
+    printResult(book.addOrder(Order{8, Side::Buy, 9900, 5, OrderType::Limit,
+                                    TimeInForce::FillOrKill}));
+    printBook(book);
+
+    std::cout << "\n6. Modify and cancel:\n";
+    std::cout << "   Rest Buy 50 @ $98.00 (order 9), then reduce it to 30 in place\n";
+    printResult(book.addOrder(Order{9, Side::Buy, 9800, 50}));
+    std::vector<Trade> trades;
+    const OrderResult m = book.modifyOrder(9, 9800, 30, trades);
+    std::cout << "  -> modify: " << toString(m.status) << " (seq " << m.sequence << "), "
+              << m.restingQuantity << " resting, time priority kept\n";
+    std::cout << "   Cancel order 9: " << (book.cancelOrder(9) ? "removed" : "not found") << "\n";
+    printBook(book);
 
     std::cout << "\n=======================================================\n";
-    std::cout << "Demo completed successfully.\n";
+    std::cout << "Demo completed. Last engine sequence number: " << book.lastSequence() << "\n";
     return 0;
 }
