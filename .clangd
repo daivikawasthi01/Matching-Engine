@@ -2,5 +2,4 @@ CompileFlags:
   Add:
     - -std=c++17
     - -Iinclude
-    - -I/Users/daivikawasthi/TechnicalProjects/Matching-Engine/include
-  CompilationDatabase: .
+  CompilationDatabase: build

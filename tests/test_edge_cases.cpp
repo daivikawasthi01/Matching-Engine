@@ -1,128 +1,142 @@
-#include <iostream>
-#include <cassert>
-#include <vector>
-#include "../include/order_book.h"
+// Edge cases: market sweeps, empty books, queue positions on cancel,
+// partially filled orders, and aggregate level bookkeeping.
+#include "test_support.h"
 
-void test_market_sell_sweep() {
+TEST(EdgeCasesTest, MarketSellSweepsBids) {
     OrderBook book;
-    book.addOrder(Order{1, Side::Buy, 100.0, 10});
-    book.addOrder(Order{2, Side::Buy, 99.0, 20});
-    book.addOrder(Order{3, Side::Buy, 98.0, 30});
+    book.addOrder(limitOrder(1, Side::Buy, 100, 10));
+    book.addOrder(limitOrder(2, Side::Buy, 99, 20));
+    book.addOrder(limitOrder(3, Side::Buy, 98, 30));
 
-    // Market Sell order sweeps top bids
-    auto trades = book.addOrder(Order{4, Side::Sell, 0.0, 25, OrderType::Market});
-    assert(trades.size() == 2);
-    // Sweeps 10 @ 100.0 first
-    assert(trades[0].buyOrderId == 1 && trades[0].price == 100.0 && trades[0].quantity == 10);
-    // Sweeps 15 @ 99.0 next
-    assert(trades[1].buyOrderId == 2 && trades[1].price == 99.0 && trades[1].quantity == 15);
+    auto r = book.addOrder(marketOrder(4, Side::Sell, 25));
+    ASSERT_EQ(r.trades.size(), 2u);
+    EXPECT_EQ(r.trades[0].buyOrderId, 1u);
+    EXPECT_EQ(r.trades[0].price, 100);
+    EXPECT_EQ(r.trades[0].quantity, 10);
+    EXPECT_EQ(r.trades[1].buyOrderId, 2u);
+    EXPECT_EQ(r.trades[1].price, 99);
+    EXPECT_EQ(r.trades[1].quantity, 15);
 
-    // Remaining in book: 5 @ 99.0 (Order 2) and 30 @ 98.0 (Order 3)
-    assert(book.getOrderCount() == 2);
-    assert(book.getBestBid().has_value() && *book.getBestBid() == 99.0);
-    std::cout << "[PASS] test_market_sell_sweep\n";
+    EXPECT_EQ(book.getOrderCount(), 2u);
+    EXPECT_EQ(book.getBestBid(), 99);
+    EXPECT_EQ(book.getVolumeAt(Side::Buy, 99), 5);
+    EXPECT_EQ(book.getVolumeAt(Side::Buy, 98), 30);
 }
 
-void test_market_order_on_empty_book() {
+TEST(EdgeCasesTest, MarketOrderOnEmptyBookDoesNothing) {
     OrderBook book;
-    // Market Buy on empty book -> 0 trades, does not rest
-    auto tradesBuy = book.addOrder(Order{1, Side::Buy, 0.0, 10, OrderType::Market});
-    assert(tradesBuy.empty());
-    assert(book.empty());
+    auto buy = book.addOrder(marketOrder(1, Side::Buy, 10));
+    EXPECT_EQ(buy.status, OrderStatus::Accepted);
+    EXPECT_TRUE(buy.trades.empty());
+    EXPECT_EQ(buy.restingQuantity, 0);
+    EXPECT_TRUE(book.empty());
 
-    // Market Sell on empty book -> 0 trades, does not rest
-    auto tradesSell = book.addOrder(Order{2, Side::Sell, 0.0, 10, OrderType::Market});
-    assert(tradesSell.empty());
-    assert(book.empty());
-    std::cout << "[PASS] test_market_order_on_empty_book\n";
+    auto sell = book.addOrder(marketOrder(2, Side::Sell, 10));
+    EXPECT_TRUE(sell.trades.empty());
+    EXPECT_TRUE(book.empty());
 }
 
-void test_cancel_queue_positions() {
+TEST(EdgeCasesTest, CancelHeadMiddleAndTailOfQueue) {
     OrderBook book;
-    // Place 3 buy orders at the exact same price $100.0
-    book.addOrder(Order{1, Side::Buy, 100.0, 10});
-    book.addOrder(Order{2, Side::Buy, 100.0, 20});
-    book.addOrder(Order{3, Side::Buy, 100.0, 30});
+    book.addOrder(limitOrder(1, Side::Buy, 100, 10));
+    book.addOrder(limitOrder(2, Side::Buy, 100, 20));
+    book.addOrder(limitOrder(3, Side::Buy, 100, 30));
+    ASSERT_EQ(book.getOrderCount(), 3u);
 
-    assert(book.getOrderCount() == 3);
+    // Middle
+    EXPECT_TRUE(book.cancelOrder(2));
+    EXPECT_EQ(book.getVolumeAt(Side::Buy, 100), 40);
 
-    // 1. Cancel middle order (Order 2)
-    assert(book.cancelOrder(2));
-    assert(book.getOrderCount() == 2);
+    // Incoming sell of 15 matches order 1 (10) then order 3 (5), skipping order 2
+    auto r = book.addOrder(limitOrder(4, Side::Sell, 100, 15));
+    ASSERT_EQ(r.trades.size(), 2u);
+    EXPECT_EQ(r.trades[0].buyOrderId, 1u);
+    EXPECT_EQ(r.trades[0].quantity, 10);
+    EXPECT_EQ(r.trades[1].buyOrderId, 3u);
+    EXPECT_EQ(r.trades[1].quantity, 5);
+    EXPECT_EQ(book.getVolumeAt(Side::Buy, 100), 25);
 
-    // Incoming Sell of 15 should match Order 1 (10) and Order 3 (5), skipping Order 2
-    auto trades = book.addOrder(Order{4, Side::Sell, 100.0, 15});
-    assert(trades.size() == 2);
-    assert(trades[0].buyOrderId == 1 && trades[0].quantity == 10);
-    assert(trades[1].buyOrderId == 3 && trades[1].quantity == 5);
-
-    // Order 3 should have 25 units left
-    assert(book.getOrderCount() == 1);
-    assert(*book.getBestBid() == 100.0);
-
-    // 2. Cancel remaining order (Order 3)
-    assert(book.cancelOrder(3));
-    assert(book.empty());
-    assert(!book.getBestBid().has_value());
-    std::cout << "[PASS] test_cancel_queue_positions (head, middle, tail)\n";
+    // Tail (and now the only order)
+    EXPECT_TRUE(book.cancelOrder(3));
+    EXPECT_TRUE(book.empty());
+    EXPECT_FALSE(book.getBestBid().has_value());
 }
 
-void test_partial_fill_then_cancel() {
+TEST(EdgeCasesTest, CancelHeadKeepsRestOfQueue) {
     OrderBook book;
-    book.addOrder(Order{1, Side::Sell, 105.0, 50});
-
-    // Buy 20 -> leaves 30 on Order 1
-    auto trades = book.addOrder(Order{2, Side::Buy, 105.0, 20});
-    assert(trades.size() == 1);
-    assert(trades[0].quantity == 20);
-    assert(book.getOrderCount() == 1);
-
-    // Cancel remaining 30 units of Order 1
-    assert(book.cancelOrder(1));
-    assert(book.empty());
-    assert(!book.getBestAsk().has_value());
-    std::cout << "[PASS] test_partial_fill_then_cancel\n";
+    book.addOrder(limitOrder(1, Side::Sell, 100, 10));
+    book.addOrder(limitOrder(2, Side::Sell, 100, 20));
+    EXPECT_TRUE(book.cancelOrder(1));
+    auto r = book.addOrder(limitOrder(3, Side::Buy, 100, 5));
+    ASSERT_EQ(r.trades.size(), 1u);
+    EXPECT_EQ(r.trades[0].sellOrderId, 2u);
 }
 
-void test_multiple_price_levels_bid_and_ask() {
+TEST(EdgeCasesTest, PartiallyFilledOrderCanBeCancelled) {
     OrderBook book;
-    // Add multiple bids
-    book.addOrder(Order{1, Side::Buy, 95.0, 10});
-    book.addOrder(Order{2, Side::Buy, 97.0, 15});
-    book.addOrder(Order{3, Side::Buy, 96.0, 20});
+    book.addOrder(limitOrder(1, Side::Sell, 105, 50));
+    auto r = book.addOrder(limitOrder(2, Side::Buy, 105, 20));
+    ASSERT_EQ(r.trades.size(), 1u);
+    EXPECT_EQ(r.trades[0].quantity, 20);
+    EXPECT_EQ(book.getVolumeAt(Side::Sell, 105), 30);
 
-    // Add multiple asks
-    book.addOrder(Order{4, Side::Sell, 102.0, 10});
-    book.addOrder(Order{5, Side::Sell, 100.0, 15});
-    book.addOrder(Order{6, Side::Sell, 101.0, 20});
-
-    assert(book.getOrderCount() == 6);
-    assert(*book.getBestBid() == 97.0);
-    assert(*book.getBestAsk() == 100.0);
-
-    // Non-crossing limit order
-    auto noTrades = book.addOrder(Order{7, Side::Buy, 99.0, 5});
-    assert(noTrades.empty());
-    assert(*book.getBestBid() == 99.0);
-
-    // Crossing order that sweeps multiple asks
-    auto sweepTrades = book.addOrder(Order{8, Side::Buy, 101.5, 30});
-    assert(sweepTrades.size() == 2);
-    assert(sweepTrades[0].sellOrderId == 5 && sweepTrades[0].price == 100.0 && sweepTrades[0].quantity == 15);
-    assert(sweepTrades[1].sellOrderId == 6 && sweepTrades[1].price == 101.0 && sweepTrades[1].quantity == 15);
-
-    // Order 6 has 5 left @ 101.0
-    assert(*book.getBestAsk() == 101.0);
-    std::cout << "[PASS] test_multiple_price_levels_bid_and_ask\n";
+    EXPECT_TRUE(book.cancelOrder(1));
+    EXPECT_TRUE(book.empty());
+    EXPECT_FALSE(book.getBestAsk().has_value());
+    EXPECT_EQ(book.getVolumeAt(Side::Sell, 105), 0);
 }
 
-int main() {
-    std::cout << "===== Running Matching Engine Edge Case Tests =====\n";
-    test_market_sell_sweep();
-    test_market_order_on_empty_book();
-    test_cancel_queue_positions();
-    test_partial_fill_then_cancel();
-    test_multiple_price_levels_bid_and_ask();
-    std::cout << "===== All Edge Case Tests Passed =====\n";
-    return 0;
+TEST(EdgeCasesTest, MultipleLevelsOnBothSides) {
+    OrderBook book;
+    book.addOrder(limitOrder(1, Side::Buy, 95, 10));
+    book.addOrder(limitOrder(2, Side::Buy, 97, 15));
+    book.addOrder(limitOrder(3, Side::Buy, 96, 20));
+    book.addOrder(limitOrder(4, Side::Sell, 102, 10));
+    book.addOrder(limitOrder(5, Side::Sell, 100, 15));
+    book.addOrder(limitOrder(6, Side::Sell, 101, 20));
+
+    EXPECT_EQ(book.getOrderCount(), 6u);
+    EXPECT_EQ(book.getBestBid(), 97);
+    EXPECT_EQ(book.getBestAsk(), 100);
+    EXPECT_EQ(book.getLevelCount(Side::Buy), 3u);
+    EXPECT_EQ(book.getLevelCount(Side::Sell), 3u);
+
+    auto none = book.addOrder(limitOrder(7, Side::Buy, 99, 5));
+    EXPECT_TRUE(none.trades.empty());
+    EXPECT_EQ(book.getBestBid(), 99);
+
+    auto sweep = book.addOrder(limitOrder(8, Side::Buy, 101, 30));
+    ASSERT_EQ(sweep.trades.size(), 2u);
+    EXPECT_EQ(sweep.trades[0].sellOrderId, 5u);
+    EXPECT_EQ(sweep.trades[0].price, 100);
+    EXPECT_EQ(sweep.trades[0].quantity, 15);
+    EXPECT_EQ(sweep.trades[1].sellOrderId, 6u);
+    EXPECT_EQ(sweep.trades[1].price, 101);
+    EXPECT_EQ(sweep.trades[1].quantity, 15);
+    EXPECT_EQ(book.getBestAsk(), 101);
+    EXPECT_EQ(book.getVolumeAt(Side::Sell, 101), 5);
+}
+
+TEST(EdgeCasesTest, BookIsNeverLeftCrossed) {
+    OrderBook book;
+    book.addOrder(limitOrder(1, Side::Sell, 100, 10));
+    book.addOrder(limitOrder(2, Side::Buy, 105, 25));   // crosses, remainder rests at 105
+    ASSERT_TRUE(book.getBestBid().has_value());
+    EXPECT_FALSE(book.getBestAsk().has_value());
+    EXPECT_EQ(book.getBestBid(), 105);
+}
+
+TEST(EdgeCasesTest, VolumeAtTracksFillsAndCancelsExactly) {
+    OrderBook book;
+    book.addOrder(limitOrder(1, Side::Buy, 100, 7));
+    book.addOrder(limitOrder(2, Side::Buy, 100, 11));
+    book.addOrder(limitOrder(3, Side::Buy, 100, 13));
+    EXPECT_EQ(book.getVolumeAt(Side::Buy, 100), 31);
+    EXPECT_EQ(book.getVolumeAt(Side::Sell, 100), 0);
+    EXPECT_EQ(book.getVolumeAt(Side::Buy, 101), 0);
+
+    book.addOrder(limitOrder(4, Side::Sell, 100, 9));   // fills 7 + 2
+    EXPECT_EQ(book.getVolumeAt(Side::Buy, 100), 22);
+    book.cancelOrder(3);
+    EXPECT_EQ(book.getVolumeAt(Side::Buy, 100), 9);
 }

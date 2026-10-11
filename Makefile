@@ -1,42 +1,36 @@
-CXX = clang++
-CXXFLAGS = -std=c++17 -Wall -Wextra -Wpedantic -Werror -Iinclude -O3
+# Convenience wrapper around CMake. CMake is the single source of truth for the build.
+#
+#   make test           build (Release) and run all tests
+#   make sanitize       build with AddressSanitizer + UBSan and run all tests
+#   make run-benchmark  build (Release) and run the benchmark
+#   make demo           run the demo walkthrough
+#   make clean
 
-BIN_DIR = bin
-SRC = src/order_book.cpp
+BUILD_DIR ?= build
+SAN_DIR   ?= build-sanitize
+WERROR    ?= OFF
+JOBS      ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
 
-all: $(BIN_DIR)/matching_engine $(BIN_DIR)/test_headers $(BIN_DIR)/test_order_book $(BIN_DIR)/test_edge_cases $(BIN_DIR)/benchmark
+all:
+	cmake -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release -DMATCHING_ENGINE_WERROR=$(WERROR)
+	cmake --build $(BUILD_DIR) -j $(JOBS)
 
-$(BIN_DIR):
-	mkdir -p $(BIN_DIR)
+test: all
+	cd $(BUILD_DIR) && ctest --output-on-failure -j $(JOBS)
 
-$(BIN_DIR)/matching_engine: src/main.cpp $(SRC) | $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+sanitize:
+	cmake -S . -B $(SAN_DIR) -DCMAKE_BUILD_TYPE=Debug -DMATCHING_ENGINE_SANITIZE=ON \
+		-DMATCHING_ENGINE_BUILD_BENCHMARKS=OFF -DMATCHING_ENGINE_WERROR=$(WERROR)
+	cmake --build $(SAN_DIR) -j $(JOBS)
+	cd $(SAN_DIR) && ctest --output-on-failure -j $(JOBS)
 
-$(BIN_DIR)/test_headers: tests/test_headers.cpp $(SRC) | $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+run-benchmark: all
+	./$(BUILD_DIR)/matching_benchmark
 
-$(BIN_DIR)/test_order_book: tests/test_order_book.cpp $(SRC) | $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) $^ -o $@
-
-$(BIN_DIR)/test_edge_cases: tests/test_edge_cases.cpp $(SRC) | $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) $^ -o $@
-
-$(BIN_DIR)/benchmark: tests/benchmark.cpp $(SRC) | $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) $^ -o $@
-
-test: $(BIN_DIR)/test_headers $(BIN_DIR)/test_order_book $(BIN_DIR)/test_edge_cases
-	@echo "\n=== [1/3] Running Header Checks ==="
-	@./$(BIN_DIR)/test_headers
-	@echo "\n=== [2/3] Running Core OrderBook Tests ==="
-	@./$(BIN_DIR)/test_order_book
-	@echo "\n=== [3/3] Running Edge Case Tests ==="
-	@./$(BIN_DIR)/test_edge_cases
-	@echo "\n>>> ALL TEST SUITES PASSED SUCCESSFULLY! <<<\n"
-
-run-benchmark: $(BIN_DIR)/benchmark
-	@./$(BIN_DIR)/benchmark
+demo: all
+	./$(BUILD_DIR)/matching_engine
 
 clean:
-	rm -rf $(BIN_DIR) benchmark matching_engine test_order_book
+	rm -rf $(BUILD_DIR) $(SAN_DIR)
 
-.PHONY: all test run-benchmark clean
+.PHONY: all test sanitize run-benchmark demo clean
