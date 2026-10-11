@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux GCC (Release, -Werror)
+            os: ubuntu-latest
+            cc: gcc
+            cxx: g++
+          - name: Linux Clang (Release, -Werror)
+            os: ubuntu-latest
+            cc: clang
+            cxx: clang++
+          - name: macOS Clang (Release, -Werror)
+            os: macos-latest
+            cc: clang
+            cxx: clang++
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DMATCHING_ENGINE_WERROR=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure --parallel 2
+
+      - name: Benchmark smoke test
+        run: ./build/matching_benchmark 20000 42 1
+
+  sanitizers:
+    name: Linux GCC (ASan + UBSan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -S . -B build-sanitize
+          -DCMAKE_BUILD_TYPE=Debug
+          -DMATCHING_ENGINE_SANITIZE=ON
+          -DMATCHING_ENGINE_BUILD_BENCHMARKS=OFF
+          -DMATCHING_ENGINE_WERROR=ON
+
+      - name: Build
+        run: cmake --build build-sanitize --parallel
+
+      - name: Test
+        working-directory: build-sanitize
+        run: ctest --output-on-failure --parallel 2
